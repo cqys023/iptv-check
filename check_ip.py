@@ -1,70 +1,48 @@
 import requests
-import re
 
 TIMEOUT = 5
 
-
-# ================== 判断 IPTV ==================
-def get_iptv_content(ip):
-    url = f"http://{ip}/"
-
-    try:
-        r = requests.get(url, timeout=TIMEOUT)
-        text = r.text
-
-        if "#EXTM3U" not in text:
-            return None
-
-        pattern = r'#EXTINF.*?\n(https?|rtp)://'
-        if re.search(pattern, text):
-            return text
-
-    except:
-        pass
-
-    return None
+INPUT_FILE = "有源IP.txt"
+OUTPUT_FILE = "output.m3u"
 
 
-# ================== 读取文件 ==================
-def read_list(file):
-    try:
-        with open(file, "r", encoding="utf-8") as f:
-            return [i.strip() for i in f if i.strip()]
-    except:
-        return []
+def is_valid_m3u(text):
+    """判断是否是有效 m3u"""
+    return "#EXTM3U" in text and "#EXTINF" in text
 
 
-# ================== 主逻辑 ==================
 def main():
-    ip_list = read_list("有源IP.txt")
+    with open(INPUT_FILE, "r", encoding="utf-8") as f:
+        ips = [i.strip() for i in f if i.strip()]
 
-    print(f"共 {len(ip_list)} 个IP\n")
+    print(f"共检测 {len(ips)} 个IP\n")
 
-    all_m3u = "#EXTM3U\n\n"
+    for ip in ips:
+        url = f"http://{ip}/"
+        print(f"检测 {url} ...")
 
-    for ip in ip_list:
-        print(f"检测 {ip} ...")
+        try:
+            r = requests.get(url, timeout=TIMEOUT)
+            text = r.text
 
-        content = get_iptv_content(ip)
+            # 判断是否可用 IPTV
+            if is_valid_m3u(text):
+                print(f"✅ 找到可用源: {url}")
 
-        if content:
-            print("✅ 有源，已提取")
+                # 直接保存
+                with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+                    f.write(text)
 
-            # 去掉重复头
-            content = content.replace("#EXTM3U", "").strip()
+                print(f"✔ 已导出: {OUTPUT_FILE}")
+                return  # 只要第一个可用就退出
 
-            # 可选：给每个源加标记
-            content = f"#EXTINF:-1 group-title=\"{ip}\",{ip}\n" + content
+            else:
+                print("❌ 不可用")
 
-            all_m3u += content + "\n\n"
-        else:
-            print("❌ 无源")
+        except:
+            print("❌ 请求失败")
 
-    # 保存总 m3u
-    with open("output.m3u", "w", encoding="utf-8") as f:
-        f.write(all_m3u)
-
-    print("\n完成！已生成 output.m3u")
+    print("\n没有找到可用源")
 
 
 if __name__ == "__main__":
