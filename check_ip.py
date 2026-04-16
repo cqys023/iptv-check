@@ -3,7 +3,7 @@ import random
 
 TIMEOUT = 5
 
-IP_POOL_FILE = "有源IP.txt"
+IP_POOL_FILE = "node_pool.js"
 CURRENT_FILE = "current_ip.txt"
 OUTPUT_FILE = "output.m3u"
 
