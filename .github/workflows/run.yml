@@ -1,35 +1,44 @@
-permissions:
-  contents: write
 name: IPTV Check
 
 on:
-  schedule:
-    - cron: '0 2 * * *'   # 每天运行
   workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *'
+
+permissions:
+  contents: write
 
 jobs:
   run:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 拉代码
-        uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
 
-      - name: Python环境
-        uses: actions/setup-python@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: 安装依赖
+      - name: Install dependencies
         run: pip install requests
 
-      - name: 执行脚本
+      - name: Run script
         run: python check_ip.py
 
-      - name: 提交结果
+      - name: Debug files
         run: |
-          git config --global user.name "bot"
-          git config --global user.email "bot@example.com"
-          git add current_ip.txt
-          git commit -m "update ip" || echo "no change"
+          pwd
+          ls -lah
+
+      - name: Commit result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add output.m3u
+          git commit -m "update m3u" || echo "no changes"
           git push
