@@ -25,7 +25,7 @@ def fetch_m3u(ip):
         return None
 
 
-# ================== 检测第一个频道是否可用 ==================
+# ================== 检测第一个频道 ==================
 def first_channel_ok(m3u_text):
     try:
         lines = m3u_text.splitlines()
@@ -35,12 +35,9 @@ def first_channel_ok(m3u_text):
                 if i + 1 < len(lines):
                     url = lines[i + 1].strip()
 
-                    # 只测第一个频道
                     r = requests.get(url, timeout=TIMEOUT)
-                    if r.status_code == 200:
-                        return True
-                    else:
-                        return False
+
+                    return r.status_code == 200
 
         return False
 
@@ -48,7 +45,7 @@ def first_channel_ok(m3u_text):
         return False
 
 
-# ================== 读取文件 ==================
+# ================== 文件操作 ==================
 def read_list(file):
     try:
         with open(file, "r", encoding="utf-8") as f:
@@ -62,12 +59,17 @@ def write_file(file, content):
         f.write(content)
 
 
-# ================== 优选IP ==================
-def pick_best_ip(ip_list):
-    random.shuffle(ip_list)
+# ================== 清空 current ==================
+def clear_current():
+    open(CURRENT_FILE, "w", encoding="utf-8").close()
 
-    for ip in ip_list:
-        print(f"优选测试: {ip}")
+
+# ================== 优选IP ==================
+def pick_best_ip(pool):
+    random.shuffle(pool)
+
+    for ip in pool:
+        print(f"优选检测: {ip}")
 
         m3u = fetch_m3u(ip)
         if not m3u:
@@ -83,16 +85,14 @@ def pick_best_ip(ip_list):
 # ================== 主逻辑 ==================
 def main():
     pool = read_list(IP_POOL_FILE)
-    current_ips = read_list(CURRENT_FILE)
+    current_list = read_list(CURRENT_FILE)
 
-    current_ip = current_ips[0] if current_ips else None
+    current_ip = current_list[0] if current_list else None
 
     print(f"当前IP: {current_ip}")
 
-    # ================== Step1：测试当前IP ==================
+    # ================== Step1：检测当前IP ==================
     if current_ip:
-        print("检测当前IP...")
-
         m3u = fetch_m3u(current_ip)
 
         if m3u and first_channel_ok(m3u):
@@ -101,17 +101,22 @@ def main():
             write_file(OUTPUT_FILE, m3u)
             return
 
-        print("❌ 当前IP失效，开始优选")
+        print("❌ 当前IP失效，开始切换")
 
-    # ================== Step2：优选新IP ==================
+    # ================== Step2：清空 current ==================
+    clear_current()
+
+    # ================== Step3：优选新IP ==================
     new_ip, m3u = pick_best_ip(pool)
 
     if new_ip:
-        write_file(CURRENT_FILE, new_ip)
-        write_file(OUTPUT_FILE, m3u)
+        write_file(CURRENT_FILE, new_ip)   # ✅ 写入新IP
+        write_file(OUTPUT_FILE, m3u)       # ✅ 写入m3u
+
         print(f"✔ 已切换IP: {new_ip}")
+
     else:
-        print("⚠️ 没有找到可用IP")
+        print("⚠️ 未找到可用IP")
 
 
 if __name__ == "__main__":
