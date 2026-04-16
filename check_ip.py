@@ -3,21 +3,29 @@ import re
 
 TIMEOUT = 5
 
-def has_iptv_source(ip):
+
+# ================== 判断 IPTV ==================
+def get_iptv_content(ip):
     url = f"http://{ip}/"
+
     try:
         r = requests.get(url, timeout=TIMEOUT)
         text = r.text
 
         if "#EXTM3U" not in text:
-            return False
+            return None
 
         pattern = r'#EXTINF.*?\n(https?|rtp)://'
-        return re.search(pattern, text) is not None
+        if re.search(pattern, text):
+            return text
+
     except:
-        return False
+        pass
+
+    return None
 
 
+# ================== 读取文件 ==================
 def read_list(file):
     try:
         with open(file, "r", encoding="utf-8") as f:
@@ -26,32 +34,37 @@ def read_list(file):
         return []
 
 
-def write_file(file, content):
-    with open(file, "w", encoding="utf-8") as f:
-        f.write(content)
-
-
+# ================== 主逻辑 ==================
 def main():
-    ip_pool = read_list("有源IP.txt")
-    current = read_list("current_ip.txt")
+    ip_list = read_list("有源IP.txt")
 
-    current_ip = current[0] if current else ""
+    print(f"共 {len(ip_list)} 个IP\n")
 
-    print(f"当前IP: {current_ip}")
+    all_m3u = "#EXTM3U\n\n"
 
-    if current_ip and has_iptv_source(current_ip):
-        print("当前IP可用")
-        return
+    for ip in ip_list:
+        print(f"检测 {ip} ...")
 
-    print("开始寻找新IP...")
+        content = get_iptv_content(ip)
 
-    for ip in ip_pool:
-        if has_iptv_source(ip):
-            print(f"找到新IP: {ip}")
-            write_file("current_ip.txt", ip)
-            return
+        if content:
+            print("✅ 有源，已提取")
 
-    print("没有可用IP")
+            # 去掉重复头
+            content = content.replace("#EXTM3U", "").strip()
+
+            # 可选：给每个源加标记
+            content = f"#EXTINF:-1 group-title=\"{ip}\",{ip}\n" + content
+
+            all_m3u += content + "\n\n"
+        else:
+            print("❌ 无源")
+
+    # 保存总 m3u
+    with open("output.m3u", "w", encoding="utf-8") as f:
+        f.write(all_m3u)
+
+    print("\n完成！已生成 output.m3u")
 
 
 if __name__ == "__main__":
