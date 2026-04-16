@@ -1,48 +1,53 @@
 import requests
 
 TIMEOUT = 5
-
-INPUT_FILE = "有源IP.txt"
 OUTPUT_FILE = "output.m3u"
 
 
-def is_valid_m3u(text):
-    """判断是否是有效 m3u"""
-    return "#EXTM3U" in text and "#EXTINF" in text
+def fetch_m3u(ip):
+    url = f"http://{ip}/"
+
+    try:
+        r = requests.get(url, timeout=TIMEOUT)
+
+        print(f"返回状态: {r.status_code}")
+
+        text = r.text.strip()
+
+        if "#EXTM3U" in text and "#EXTINF" in text:
+            return text
+
+    except Exception as e:
+        print(f"请求失败: {e}")
+
+    return None
 
 
 def main():
-    with open(INPUT_FILE, "r", encoding="utf-8") as f:
+    with open("有源IP.txt", "r", encoding="utf-8") as f:
         ips = [i.strip() for i in f if i.strip()]
 
-    print(f"共检测 {len(ips)} 个IP\n")
+    print(f"共 {len(ips)} 个IP")
 
     for ip in ips:
-        url = f"http://{ip}/"
-        print(f"检测 {url} ...")
+        print(f"\n检测 {ip}")
 
-        try:
-            r = requests.get(url, timeout=TIMEOUT)
-            text = r.text
+        m3u = fetch_m3u(ip)
 
-            # 判断是否可用 IPTV
-            if is_valid_m3u(text):
-                print(f"✅ 找到可用源: {url}")
+        if m3u:
+            print("✅ 找到可用源")
 
-                # 直接保存
-                with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-                    f.write(text)
+            with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+                f.write(m3u)
 
-                print(f"✔ 已导出: {OUTPUT_FILE}")
-                return  # 只要第一个可用就退出
+            print(f"✔ 已生成 {OUTPUT_FILE}")
 
-            else:
-                print("❌ 不可用")
+            return
 
-        except:
-            print("❌ 请求失败")
+        else:
+            print("❌ 不可用")
 
-    print("\n没有找到可用源")
+    print("\n⚠️ 没有找到任何可用源")
 
 
 if __name__ == "__main__":
