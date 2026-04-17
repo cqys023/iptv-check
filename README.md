@@ -34,7 +34,7 @@ https://raw.githubusercontent.com/cqys023/iptv-check/main/output.m3u
 ### 🌐 Worker 加速入口（推荐）
 
 ```
-[https://你的worker地址/](https://gitiptv.feifanlib.shop/)
+[https://gitiptv.feifanlib.shop]
 ```
 
 👉 可用于播放器直接订阅
