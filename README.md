@@ -27,15 +27,13 @@ IPTV Check 是一个基于：
 
 ### 📡 M3U直链（自动更新）
 
-```
-https://raw.githubusercontent.com/cqys023/iptv-check/main/output.m3u
-```
+👉 [点击访问](https://raw.githubusercontent.com/cqys023/iptv-check/main/output.m3u)
+
+---
 
 ### 🌐 Worker 加速入口（推荐）
 
-```
-[https://gitiptv.feifanlib.shop]
-```
+👉 [点击访问](https://gitiptv.feifanlib.shop)
 
 👉 可用于播放器直接订阅
 
