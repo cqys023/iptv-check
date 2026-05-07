@@ -2,20 +2,25 @@ import requests
 import random
 import urllib3
 
-# 忽略 HTTPS 证书警告
+# ================== 忽略 HTTPS 证书警告 ==================
 urllib3.disable_warnings()
 
-TIMEOUT = 8  # ⚠️ 提高超时，避免误判慢源
+# ================== 配置 ==================
+TIMEOUT = (10, 30)
 
 IP_POOL_FILE = "node_pool.js"
 CURRENT_FILE = "current_ip.txt"
 OUTPUT_FILE = "output.m3u"
 
+# VLC UA（很多IPTV对白名单放行）
+HEADERS = {
+    "User-Agent": "VLC/3.0.18 LibVLC/3.0.18"
+}
+
 
 # ================== 获取M3U ==================
 def fetch_m3u(ip):
 
-    # 自动尝试 http / https
     schemes = ["http", "https"]
 
     for scheme in schemes:
@@ -23,148 +28,157 @@ def fetch_m3u(ip):
         url = f"{scheme}://{ip}/"
 
         try:
-            print(f"尝试获取M3U: {url}")
+
+            print(f"\n尝试获取M3U: {url}")
 
             r = requests.get(
                 url,
                 timeout=TIMEOUT,
-                headers={
-                    "User-Agent": "Mozilla/5.0"
-                },
-                verify=False,          # 忽略HTTPS证书
-                allow_redirects=True   # 允许跳转
+                headers=HEADERS,
+                verify=False,
+                allow_redirects=True
             )
 
+            print(f"状态码: {r.status_code}")
+
             if r.status_code != 200:
-                print(f"状态码异常: {r.status_code}")
                 continue
 
             text = r.text.strip()
 
             # 判断是否为M3U
             if "#EXTM3U" in text and "#EXTINF" in text:
-                print("✅ 获取M3U成功")
+
+                print("✅ M3U获取成功")
+
                 return text
 
+            else:
+
+                print("❌ 返回内容不是M3U")
+
         except Exception as e:
-            print(f"获取M3U失败: {e}")
+
+            print(f"获取失败: {e}")
 
     return None
 
 
-# ================== 检测第一个频道 ==================
-def first_channel_ok(m3u_text):
+# ================== 提取第一个频道 ==================
+def get_first_channel(m3u_text):
+
+    lines = m3u_text.splitlines()
+
+    for line in lines:
+
+        line = line.strip()
+
+        if line.startswith("http"):
+            return line
+
+    return None
+
+
+# ================== 测试频道是否可播放 ==================
+def test_channel(url):
+
+    print(f"测试频道: {url}")
 
     try:
-        lines = m3u_text.splitlines()
 
-        for i in range(len(lines)):
+        r = requests.get(
+            url,
+            timeout=TIMEOUT,
+            stream=True,
+            headers=HEADERS,
+            verify=False,
+            allow_redirects=True
+        )
 
-            if lines[i].startswith("#EXTINF"):
+        print(f"频道状态码: {r.status_code}")
 
-                if i + 1 < len(lines):
+        # IPTV常见状态
+        if r.status_code not in [200, 206]:
+            return False
 
-                    url = lines[i + 1].strip()
+        # 尝试读取真实数据
+        for chunk in r.iter_content(1024):
 
-                    print(f"测试频道: {url}")
+            if chunk:
 
-                    # ---- 方式1：HEAD ----
-                    try:
+                print("✅ 检测到流数据")
 
-                        r = requests.head(
-                            url,
-                            timeout=TIMEOUT,
-                            allow_redirects=True,
-                            verify=False,
-                            headers={
-                                "User-Agent": "Mozilla/5.0"
-                            }
-                        )
+                return True
 
-                        if r.status_code in [200, 206, 301, 302]:
-                            return True
-
-                    except:
-                        pass
-
-                    # ---- 方式2：GET（流模式）----
-                    try:
-
-                        r = requests.get(
-                            url,
-                            timeout=TIMEOUT,
-                            stream=True,
-                            verify=False,
-                            allow_redirects=True,
-                            headers={
-                                "User-Agent": "Mozilla/5.0"
-                            }
-                        )
-
-                        if r.status_code in [200, 206, 301, 302]:
-
-                            # 读取一点真实数据
-                            for chunk in r.iter_content(1024):
-                                if chunk:
-                                    return True
-
-                    except:
-                        pass
-
-                    return False
+        print("❌ 没有读取到流数据")
 
         return False
 
     except Exception as e:
+
         print(f"频道检测失败: {e}")
+
         return False
 
 
-# ================== 读取 ==================
+# ================== 读取文件 ==================
 def read_list(file):
 
     try:
+
         with open(file, "r", encoding="utf-8") as f:
             return [i.strip() for i in f if i.strip()]
 
     except:
+
         return []
 
 
-# ================== 写入 ==================
+# ================== 写入文件 ==================
 def write_file(file, content):
 
     with open(file, "w", encoding="utf-8") as f:
         f.write(content)
 
 
-# ================== 优选 ==================
+# ================== 优选IP ==================
 def pick_ip(pool):
 
     random.shuffle(pool)
 
     for ip in pool:
 
-        print(f"\n测试候选IP: {ip}")
+        print("\n==============================")
+        print(f"测试候选IP: {ip}")
 
+        # 1️⃣ 获取M3U
         m3u = fetch_m3u(ip)
 
         if not m3u:
-            print("❌ 无M3U")
+
+            print("❌ 获取M3U失败")
+
             continue
 
-        # ⚠️ 宽松策略：先认为可用
-        if first_channel_ok(m3u):
+        # 2️⃣ 获取第一个频道
+        first_url = get_first_channel(m3u)
 
-            print("✅ 频道可用")
+        if not first_url:
+
+            print("❌ 没有频道地址")
+
+            continue
+
+        # 3️⃣ 测试频道
+        if test_channel(first_url):
+
+            print("✅ IP有效")
+
             return ip, m3u
 
         else:
 
-            print("⚠️ 频道检测失败，但M3U存在（可能误判）")
-
-            # 👉 fallback：只要M3U存在也可用（防误杀）
-            return ip, m3u
+            print("❌ 第一个频道无法播放")
 
     return None, None
 
@@ -180,40 +194,50 @@ def main():
 
     print(f"当前IP: {current_ip}")
 
-    # ================== 检测当前 ==================
+    # ================== 检测当前IP ==================
     if current_ip:
 
         print("\n检测当前IP...")
 
+        # 1️⃣ 获取M3U
         m3u = fetch_m3u(current_ip)
 
         if m3u:
 
-            if first_channel_ok(m3u):
+            # 2️⃣ 获取第一个频道
+            first_url = get_first_channel(m3u)
 
-                print("✔ 当前IP完全可用")
+            if first_url:
 
-                write_file(OUTPUT_FILE, m3u)
+                # 3️⃣ 测试频道
+                if test_channel(first_url):
 
-                return
+                    print("✔ 当前IP可用")
+
+                    write_file(OUTPUT_FILE, m3u)
+
+                    return
+
+                else:
+
+                    print("❌ 第一个频道不可播放")
 
             else:
 
-                print("⚠️ 当前IP频道检测失败，但可能仍可用")
+                print("❌ 没找到频道地址")
 
-                # 👉 宽松模式（关键！）
-                write_file(OUTPUT_FILE, m3u)
+        else:
 
-                return
+            print("❌ 获取M3U失败")
 
         print("❌ 当前IP失效，准备切换")
 
-    # ================== 优选 ==================
+    # ================== 重新优选 ==================
     new_ip, m3u = pick_ip(pool)
 
     if new_ip:
 
-        write_file(CURRENT_FILE, new_ip)   # ✔ 自动覆盖（清空+写入）
+        write_file(CURRENT_FILE, new_ip)
 
         write_file(OUTPUT_FILE, m3u)
 
