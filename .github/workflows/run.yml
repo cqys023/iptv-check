@@ -1,5 +1,5 @@
-- name: Install ffmpeg
-  run: sudo apt update && sudo apt install ffmpeg -y
+name: Install ffmpeg
+run: sudo apt update && sudo apt install ffmpeg -y
 name: IPTV Auto Check
 
 on:
