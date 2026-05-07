@@ -1,5 +1,3 @@
-name: Install ffmpeg
-run: sudo apt update && sudo apt install ffmpeg -y
 name: IPTV Auto Check
 
 on:
@@ -18,22 +16,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ================== 安装 ffmpeg（关键） ==================
+      - name: Install ffmpeg
+        run: |
+          sudo apt update
+          sudo apt install ffmpeg -y
+
+      # ================== Python ==================
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
+      # ================== 依赖 ==================
       - name: Install deps
         run: pip install requests
 
+      # ================== 运行脚本 ==================
       - name: Run script
         run: python check_ip.py
 
+      # ================== 调试 ==================
       - name: Show files (debug)
         run: |
           ls -lah
           cat current_ip.txt || true
 
+      # ================== 提交结果 ==================
       - name: Commit changes
         run: |
           git config user.name "github-actions[bot]"
