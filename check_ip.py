@@ -1,96 +1,112 @@
 import requests
+import random
 import subprocess
 import re
 import urllib3
 
 urllib3.disable_warnings()
 
-TIMEOUT = (10, 20)
+TIMEOUT = (10, 25)
 
-FFMPEG_PATH = "ffmpeg"
+IP_POOL_FILE = "node_pool.js"
+CURRENT_FILE = "current_ip.txt"
+OUTPUT_FILE = "output.m3u"
 
 HEADERS = {
     "User-Agent": "VLC/3.0.18 LibVLC/3.0.18"
 }
 
+FFPROBE = "ffprobe"
+
 
 # ================== 获取M3U ==================
 def fetch_m3u(ip):
 
-    url = f"http://{ip}/"
+    schemes = ["https", "http"]
 
-    try:
-        r = requests.get(
-            url,
-            timeout=TIMEOUT,
-            headers=HEADERS,
-            verify=False,
-            allow_redirects=True
-        )
+    for scheme in schemes:
 
-        if r.status_code != 200:
-            return None
+        url = f"{scheme}://{ip}/"
 
-        text = r.text.strip()
+        try:
+            print(f"\n尝试M3U: {url}")
 
-        if "#EXTINF" in text and "http" in text:
-            return text
+            r = requests.get(
+                url,
+                timeout=TIMEOUT,
+                headers=HEADERS,
+                verify=False,
+                allow_redirects=True
+            )
 
-    except:
-        pass
+            print("状态码:", r.status_code)
+
+            if r.status_code != 200:
+                continue
+
+            text = r.text.strip()
+
+            # 宽松判断（防止误杀）
+            if "#EXTINF" in text and "http" in text:
+                print("✅ 获取M3U成功")
+                return text
+
+        except Exception as e:
+            print("请求失败:", e)
 
     return None
 
 
 # ================== 提取第一个频道 ==================
-def get_first_url(m3u):
+def get_first_channel(m3u):
 
     for line in m3u.splitlines():
+        line = line.strip()
         if line.startswith("http"):
             return line
 
     return None
 
 
-# ================== ffmpeg检测分辨率 ==================
+# ================== ffprobe获取分辨率 ==================
 def get_resolution(url):
 
     cmd = [
-        FFMPEG_PATH,
-        "-i", url,
-        "-t", "5",
-        "-f", "null",
-        "-"
+        FFPROBE,
+        "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=width,height",
+        "-of", "csv=p=0",
+        url
     ]
 
     try:
         result = subprocess.check_output(
             cmd,
-            stderr=subprocess.STDOUT,
-            timeout=15
-        ).decode(errors="ignore")
+            timeout=20,
+            stderr=subprocess.STDOUT
+        ).decode().strip()
 
-        match = re.search(r"(\d{3,4})x(\d{3,4})", result)
+        print("ffprobe结果:", result)
+
+        match = re.match(r"(\d+),(\d+)", result)
 
         if match:
             return int(match.group(1)), int(match.group(2))
 
-    except:
-        pass
+    except Exception as e:
+        print("ffprobe失败:", e)
 
     return None, None
 
 
-# ================== 判断是否高清 ==================
-def is_hd(width, height):
+# ================== 高清判断 ==================
+def is_hd(w, h):
 
-    if not width:
+    if not w:
         return False
 
-    if width >= 1280 and height >= 720:
-        return True
-
-    return False
+    return w >= 1280 and h >= 720
 
 
 # ================== 测试频道 ==================
@@ -98,47 +114,113 @@ def test_channel(url):
 
     print(f"\n测试频道: {url}")
 
-    width, height = get_resolution(url)
+    w, h = get_resolution(url)
 
-    if not width:
+    if not w:
         print("❌ 无法获取分辨率")
         return False
 
-    print(f"分辨率: {width}x{height}")
+    print(f"分辨率: {w}x{h}")
 
-    if is_hd(width, height):
+    if is_hd(w, h):
         print("✅ 高清源")
         return True
 
+    print("❌ 非高清")
+    return False
+
+
+# ================== 读取列表 ==================
+def read_list(file):
+
+    try:
+        with open(file, "r", encoding="utf-8") as f:
+            return [i.strip() for i in f if i.strip()]
+    except:
+        return []
+
+
+# ================== 写入 ==================
+def write_file(file, content):
+
+    with open(file, "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+# ================== IP检测 ==================
+def pick_ip(pool):
+
+    random.shuffle(pool)
+
+    for ip in pool:
+
+        print("\n==============================")
+        print(f"测试IP: {ip}")
+
+        m3u = fetch_m3u(ip)
+
+        if not m3u:
+            print("❌ M3U失败")
+            continue
+
+        first = get_first_channel(m3u)
+
+        if not first:
+            print("❌ 无频道")
+            continue
+
+        if test_channel(first):
+            print("✅ IP可用（高清）")
+            return ip, m3u
+
+        else:
+            print("❌ 非高清或不可用")
+
+    return None, None
+
+
+# ================== 主逻辑 ==================
+def main():
+
+    pool = read_list(IP_POOL_FILE)
+    current = read_list(CURRENT_FILE)
+
+    current_ip = current[0] if current else None
+
+    print(f"当前IP: {current_ip}")
+
+    # ===== 当前IP检测 =====
+    if current_ip:
+
+        print("\n检测当前IP...")
+
+        m3u = fetch_m3u(current_ip)
+
+        if m3u:
+
+            first = get_first_channel(m3u)
+
+            if first and test_channel(first):
+
+                print("✔ 当前IP高清可用")
+                write_file(OUTPUT_FILE, m3u)
+                return
+
+        print("❌ 当前IP不可用，切换")
+
+    # ===== IP池筛选 =====
+    new_ip, m3u = pick_ip(pool)
+
+    if new_ip:
+
+        write_file(CURRENT_FILE, new_ip)
+        write_file(OUTPUT_FILE, m3u)
+
+        print(f"\n✔ 已切换IP: {new_ip}")
+
     else:
-        print("❌ 非高清源")
-        return False
+        print("\n❌ 没有高清源")
 
 
-# ================== 主检测 ==================
-def check_ip(ip):
-
-    print(f"\n检测IP: {ip}")
-
-    m3u = fetch_m3u(ip)
-
-    if not m3u:
-        print("❌ M3U获取失败")
-        return False
-
-    url = get_first_url(m3u)
-
-    if not url:
-        print("❌ 无频道")
-        return False
-
-    return test_channel(url)
-
-
-# ================== 示例 ==================
-ip = "78962588856486165751857.iepose.cn"
-
-if check_ip(ip):
-    print("\n✔ 可用高清源")
-else:
-    print("\n❌ 不符合高清")
+if __name__ == "__main__":
+    main()
