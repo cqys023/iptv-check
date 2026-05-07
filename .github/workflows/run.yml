@@ -10,46 +10,43 @@ permissions:
 
 jobs:
   run:
+    # 使用带 ffmpeg 的 Docker 镜像
     runs-on: ubuntu-latest
+    container:
+      image: jrottenberg/ffmpeg:5.1-ubuntu
 
     steps:
+      # 1️⃣ Checkout 代码
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ================== 安装 ffmpeg（关键） ==================
-      - name: Install ffmpeg
-        run: |
-          sudo apt update
-          sudo apt install ffmpeg -y
-
-      # ================== Python ==================
+      # 2️⃣ 安装 Python
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      # ================== 依赖 ==================
-      - name: Install deps
+      # 3️⃣ 安装 Python 依赖
+      - name: Install Python deps
         run: pip install requests
 
-      # ================== 运行脚本 ==================
-      - name: Run script
+      # 4️⃣ 运行 IPTV 脚本
+      - name: Run IPTV script
         run: python check_ip.py
 
-      # ================== 调试 ==================
-      - name: Show files (debug)
+      # 5️⃣ 调试文件
+      - name: Show output files (debug)
         run: |
           ls -lah
           cat current_ip.txt || true
+          cat output.m3u || true
 
-      # ================== 提交结果 ==================
+      # 6️⃣ 提交更新到仓库
       - name: Commit changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           git add current_ip.txt output.m3u
-
           git commit -m "update IPTV source" || echo "no changes"
-
           git push
