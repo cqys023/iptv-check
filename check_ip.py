@@ -11,6 +11,11 @@ TIMEOUT = (10, 25)
 
 IP_POOL_FILE = "node_pool.js"
 CURRENT_FILE = "current_ip.txt"
+
+# 当前正在使用的主M3U
+MAIN_M3U_FILE = "main.m3u"
+
+# 输出的新M3U
 OUTPUT_FILE = "output.m3u"
 
 HEADERS = {
@@ -48,16 +53,14 @@ def fetch_m3u(ip):
 
             text = r.text.strip()
 
-            # ===== 调试输出 =====
             print("\n返回内容前300字符：")
             print(text[:300])
 
-            # ===== 宽松M3U判断 =====
+            # ===== 宽松判断 =====
             if (
                 "#EXTINF" in text
                 or "#EXTM3U" in text
                 or "group-title" in text
-                or "/608807420" in text
             ):
 
                 print("✅ 获取M3U成功")
@@ -132,19 +135,18 @@ def is_hd(w, h):
     return w >= 1280 and h >= 720
 
 
-# ================== 测试频道（失败重试1次） ==================
+# ================== 测试频道 ==================
 def test_channel(url):
 
     print(f"\n测试频道: {url}")
 
-    # 最多检测2次
+    # 最多测试2次
     for attempt in range(1, 3):
 
         print(f"\n第 {attempt} 次检测...")
 
         w, h = get_resolution(url)
 
-        # 获取成功
         if w and h:
 
             print(f"分辨率: {w}x{h}")
@@ -161,7 +163,6 @@ def test_channel(url):
 
                 return False
 
-        # 第一次失败后等待
         if attempt < 2:
 
             print("⚠️ 获取分辨率失败，1秒后重试...")
@@ -171,6 +172,20 @@ def test_channel(url):
     print("❌ 两次检测均失败")
 
     return False
+
+
+# ================== 读取文件 ==================
+def read_file(file):
+
+    try:
+
+        with open(file, "r", encoding="utf-8") as f:
+
+            return f.read()
+
+    except:
+
+        return ""
 
 
 # ================== 读取列表 ==================
@@ -195,7 +210,42 @@ def write_file(file, content):
         f.write(content)
 
 
-# ================== IP检测 ==================
+# ================== 测试main.m3u ==================
+def check_main_m3u():
+
+    print("\n==============================")
+    print("检测 main.m3u")
+
+    content = read_file(MAIN_M3U_FILE)
+
+    if not content:
+
+        print("❌ main.m3u不存在或为空")
+
+        return False
+
+    first = get_first_channel(content)
+
+    if not first:
+
+        print("❌ main.m3u无频道")
+
+        return False
+
+    if test_channel(first):
+
+        print("✔ main.m3u 当前高清可用")
+
+        write_file(OUTPUT_FILE, content)
+
+        return True
+
+    print("❌ main.m3u 非高清或失效")
+
+    return False
+
+
+# ================== IP池检测 ==================
 def pick_ip(pool):
 
     random.shuffle(pool)
@@ -237,36 +287,16 @@ def pick_ip(pool):
 # ================== 主逻辑 ==================
 def main():
 
+    # ===== 先检测当前 main.m3u =====
+    if check_main_m3u():
+
+        print("\n✔ 当前main.m3u仍然高清，不切换IP")
+
+        return
+
+    # ===== 当前main.m3u不行，开始换IP =====
     pool = read_list(IP_POOL_FILE)
 
-    current = read_list(CURRENT_FILE)
-
-    current_ip = current[0] if current else None
-
-    print(f"当前IP: {current_ip}")
-
-    # ===== 当前IP检测 =====
-    if current_ip:
-
-        print("\n检测当前IP...")
-
-        m3u = fetch_m3u(current_ip)
-
-        if m3u:
-
-            first = get_first_channel(m3u)
-
-            if first and test_channel(first):
-
-                print("✔ 当前IP高清可用")
-
-                write_file(OUTPUT_FILE, m3u)
-
-                return
-
-        print("❌ 当前IP不可用，切换")
-
-    # ===== 从IP池选择 =====
     new_ip, m3u = pick_ip(pool)
 
     if new_ip:
@@ -275,11 +305,13 @@ def main():
 
         write_file(OUTPUT_FILE, m3u)
 
-        print(f"\n✔ 已切换IP: {new_ip}")
+        write_file(MAIN_M3U_FILE, m3u)
+
+        print(f"\n✔ 已切换高清IP: {new_ip}")
 
     else:
 
-        print("\n❌ 没有高清源")
+        print("\n❌ 没有找到高清源")
 
 
 # ================== 启动 ==================
