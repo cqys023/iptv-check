@@ -2,8 +2,8 @@ name: IPTV Auto Check
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 2 * * *'  # 每天北京时间 10 点 UTC
+#  schedule:
+#    - cron: '0 2 * * *'  # 每天北京时间 10 点 UTC
 
 permissions:
   contents: write
